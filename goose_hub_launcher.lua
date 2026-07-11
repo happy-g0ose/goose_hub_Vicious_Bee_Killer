@@ -1,15 +1,15 @@
--- ============================================================
--- GOOSE HUB — LAUNCHER & AUTH SYSTEM
--- Сессия: 1 неделя (604800 секунд)
--- ============================================================
-
+-- Чистый математический XOR. Работает идеально на ЛЮБЫХ мобильных и ПК читах без bit32
 local function safe_xor(a, b)
     local res = 0
     local bit_val = 1
     while a > 0 or b > 0 do
-        local ra = a % 2; local rb = b % 2
-        if ra ~= rb then res = res + bit_val end
-        a = math.floor(a / 2); b = math.floor(b / 2)
+        local ra = a % 2
+        local rb = b % 2
+        if ra ~= rb then
+            res = res + bit_val
+        end
+        a = math.floor(a / 2)
+        b = math.floor(b / 2)
         bit_val = bit_val * 2
     end
     return res
@@ -22,33 +22,56 @@ local function decrypt(bytes, key)
         table.insert(chars, string.char(safe_xor(bytes[i], k)))
     end
     local decrypted = table.concat(chars)
-    return decrypted:sub(18) 
+    return decrypted:sub(18) -- Отрезаем технический префикс "GooseAuthSecBlock"
 end
 
 local player = game.Players.LocalPlayer
 local current_id = tostring(player.UserId)
+local HttpService = game:GetService("HttpService")
 
--- Эту базу (Whitelist) ты теперь сможешь легко брать из Discord-бота командой /whitelist
-local Whitelist = {
-    ["1753335441"] = {
-        crypto_data = {118.0, 88.0, 90.0, 64.0, 86.0, 114.0, 64.0, 64.0, 92.0, 98.0, 39.0, 80.0, 113.0, 63.0, 24.0, 87.0, 25.0, 5.0, 71.0, 6.0, 84.0, 65.0, 66.0, 14.0, 22.0, 36.0, 80.0, 64.0, 27.0, 84.0, 90.0, 71.0, 93.0, 65.0, 86.0, 68.0, 49.0, 86.0, 65.0, 48.0, 24.0, 90.0, 6.0, 8.0, 93.0, 6.0, 10.0, 81.0, 23.0, 76.0, 22.0, 49.0, 94.0, 88.0, 70.0, 86.0, 64.0, 94.0, 90.0, 80.0, 25.0, 66.0, 54.0, 82.0, 80.0, 56.0, 88.0, 91.0, 29.0, 10.0, 64.0, 23.0, 76.0, 80.0, 13.0, 75.0, 74.0, 50.0, 93.0, 95.0, 95.0, 91.0, 88.0, 95.0, 81.0, 71.0, 82.0, 110.0, 115.0, 7.0, 6.0, 102.0, 70.0, 80.0, 20.0, 30.0, 85.0, 93.0, 86.0, 87.0, 30.0, 82.0, 22.0, 62.0, 84.0, 86.0, 81.0, 64.0, 28.0, 94.0, 84.0, 93.0, 90.0, 30.0, 37.0, 90.0, 70.0, 38.0, 27.0, 94.0, 1.0, 10.0, 91.0, 20.0, 64.0, 88.0, 31.0, 67.0, 93.0, 48.0, 90.0, 86.0, 70.0, 64.0, 108.0, 95.0, 94.0, 94.0, 94.0, 91.0, 49.0, 29.0, 95.0, 38.0, 22.0}
-    }
-}
+-- ============================================================
+-- ДИНАМИЧЕСКАЯ ЗАГРУЗКА WHITELIST С ТВОЕГО REPO (БЕЗ ХАРДКОДА)
+-- ============================================================
+local Whitelist = {}
+local database_url = "https://raw.githubusercontent.com/happy-g0ose/goose_hub_Vicious_Bee_Killer/refs/heads/main/whitelist.json"
 
+local success, response = pcall(function()
+    return game:HttpGet(database_url)
+end)
+
+if success then
+    local decode_success, decoded_data = pcall(function()
+        return HttpService:JSONDecode(response)
+    end)
+    if decode_success and decoded_data then
+        Whitelist = decoded_data
+    else
+        player:Kick("🔒 Ошибка: База данных ключей повреждена. Напиши владельцу хаба.")
+        return
+    end
+else
+    player:Kick("🔒 Ошибка: Не удалось получить доступ к серверу авторизации.")
+    return
+end
+
+-- Проверка на наличие ID в базе данных
 if not Whitelist[current_id] then
-    player:Kick("🔒 Access Denied. Your ID is not whitelisted.")
+    player:Kick("🔒 Access Denied. Your ID is not whitelisted. (ID: " .. current_id .. ")")
     return
 end
 
 local user_data = Whitelist[current_id]
-local HttpService = game:GetService("HttpService")
 local cache_file = "sys_session_data.json"
 
 local function try_auth(pass)
     if pass == "" or #pass < 6 then return false, nil end
     local input_key = current_id .. pass
-    local success, decrypted_url = pcall(function() return decrypt(user_data.crypto_data, input_key) end)
-    if success and decrypted_url:match("^https?://") then return true, decrypted_url end
+    local success, decrypted_url = pcall(function()
+        return decrypt(user_data.crypto_data, input_key)
+    end)
+    if success and decrypted_url:match("^https?://") then
+        return true, decrypted_url
+    end
     return false, nil
 end
 
@@ -118,7 +141,9 @@ CloseButton.Font = Enum.Font.GothamBold
 CloseButton.TextSize = 14
 CloseButton.Parent = MainFrame
 
-CloseButton.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
 
 local TextBox = Instance.new("TextBox")
 TextBox.Size = UDim2.new(1, -30, 0, 35)
@@ -177,7 +202,7 @@ Button.MouseButton1Click:Connect(function()
         if writefile then
             pcall(writefile, cache_file, HttpService:JSONEncode({
                 password = entered_password,
-                expires = os.time() + 604800 -- Ровно 1 неделя в секундах
+                expires = os.time() + 86400
             }))
         end
 
